@@ -62,9 +62,10 @@
 <p>假设需要上传的文件为:eval.php,服务端的白名单允许.jpg的格式，则修改文件名为：eval.php%00.jpg。因为文件系统读到%00会认为文件已经结束，但是利用%00截断也需要根据服务端具体逻辑，需要判断服务端是否会对上传的文件进行重命名<br />
 服务端检测文件后缀名的逻辑是通过lastIndexOf(“.”)实现，这种情况.jpg会会被服务器放行，但是！</p>
 
-<h3 id="如果服务器对文件进行重命名">如果服务器对文件进行重命名</h3>
-
-<p>那除去.jpg部分其他部分都会被重命名，%00字段也会被覆盖，这种情况即使文件内容是php代码，但文件会变成20170815123012.jpg，即便能够访问上传的文件，系统的解析方式会是jpg而不是php，绕过失败，如下面的服务端逻辑：</p>
+<ul>
+  <li>如果服务器对文件进行重命名<br />
+  那除去.jpg部分其他部分都会被重命名，%00字段也会被覆盖，这种情况即使文件内容是php代码，但文件会变成20170815123012.jpg，即便能够访问上传的文件，系统的解析方式会是jpg而不是php，绕过失败，如下面的服务端逻辑：</li>
+</ul>
 
 <figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="n">FileItemFactory</span> <span class="n">factory</span> <span class="o">=</span> <span class="k">new</span> <span class="n">DiskFileItemFactory</span><span class="o">();</span>
 <span class="n">ServletFileUpload</span> <span class="n">upload</span> <span class="o">=</span> <span class="k">new</span> <span class="n">ServletFileUpload</span><span class="o">(</span><span class="n">factory</span><span class="o">);</span>
@@ -105,11 +106,16 @@
 	<span class="o">}</span>
 <span class="o">}</span></code></pre></figure>
 
-<h3 id="如果服务器不对文件进行重命名">如果服务器不对文件进行重命名</h3>
-<p>这种情况，%00可以完美绕过，服务器检查了.jpg,验证通过。直接将该文件存在服务端，服务器读到%00会停止，将文件写入eval.php中。</p>
-
-<h3 id="服务端不存在00截断漏洞">服务端不存在%00截断漏洞</h3>
-<p>对于asp，jsp，php不同的版本可能会有不同的截断漏洞，一般低版本会存在%00截断漏洞(%00截断只在php3,5之前，并且GPC关闭的情况下，才会存在漏洞)，高版本%00截断漏洞会无效，这种情况就无法绕过，但是对于某些服务器，又会存在%00空字节执行漏洞，如Nginx版本：0.5.<em>, 0.6.</em>, 0.7 &lt;= 0.7.65, 0.8 &lt;= 0.8.37。URL里面在遇到%00空字节时与FastCGI处理不一致，导致可在非php文件中嵌入php代码，通过访问url+%00.php来执行其中的php代码。如：http://local/robots.txt%00.php会把robots.txt文件当作php来执行。</p>
+<ul>
+  <li>
+    <p>如果服务器不对文件进行重命名<br />
+  这种情况，%00可以完美绕过，服务器检查了.jpg,验证通过。直接将该文件存在服务端，服务器读到%00会停止，将文件写入eval.php中。</p>
+  </li>
+  <li>
+    <p>服务端不存在%00截断漏洞<br />
+  对于asp，jsp，php不同的版本可能会有不同的截断漏洞，一般低版本会存在%00截断漏洞(%00截断只在php3,5之前，并且GPC关闭的情况下，才会存在漏洞)，高版本%00截断漏洞会无效，这种情况就无法绕过，但是对于某些服务器，又会存在%00空字节执行漏洞，如Nginx版本：0.5.<em>, 0.6.</em>, 0.7 &lt;= 0.7.65, 0.8 &lt;= 0.8.37。URL里面在遇到%00空字节时与FastCGI处理不一致，导致可在非php文件中嵌入php代码，通过访问url+%00.php来执行其中的php代码。如：http://local/robots.txt%00.php会把robots.txt文件当作php来执行。</p>
+  </li>
+</ul>
 
 <h2 id="4-和截断-绕过">4. “.”和”/”截断-绕过</h2>
 <p>在windows7系统下，长于226个英文句号会出现截断效果。情况同%00，改漏洞在php3.5以后版本已经修复</p>
@@ -147,14 +153,16 @@
 </code></pre>
 
 <h2 id="10-上传shell的其他方式">10. 上传shell的其他方式:</h2>
-<p>sql注入写入木马文件。列举这种方式的限制条件：<br />
-1.sql语句执行时需要写入权限，一般mysql.ini文件会有参数secure_file_priv=”c:/wamp64/tmp”，
-指定sql语句执行时，只能写到secure_file_priv指定的目录下。<br />
-2.需要sql注入漏洞。<br />
-3.写入shell的路径是绝对路径，因此也要获取web站点的绝对路径，以此获取shell相对web站点根目录的相对路径，通过webbrowser访问到shell<br />
-4.secure_file_priv指定的目录如果超出网站根目录的范围，web上将无法访问到(如果没有访问控制，也许可以通过../../../到达)<br />
-sql写入方式：union all select 1,’php一句话木马’,3,4,5,6 into outfile ‘D:/www/t.php’<br />
-secure_file_priv=”c:/wamp64/tmp”。</p>
+<p>sql注入写入木马文件。列举这种方式的限制条件：</p>
+<ul>
+  <li>sql语句执行时需要写入权限，一般mysql.ini文件会有参数secure_file_priv=”c:/wamp64/tmp”，
+指定sql语句执行时，只能写到secure_file_priv指定的目录下。</li>
+  <li>需要sql注入漏洞。</li>
+  <li>写入shell的路径是绝对路径，因此也要获取web站点的绝对路径，以此获取shell相对web站点根目录的相对路径，通过webbrowser访问到shell</li>
+  <li>secure_file_priv指定的目录如果超出网站根目录的范围，web上将无法访问到(如果没有访问控制，也许可以通过../../../到达)<br />
+sql写入方式：union all select 1,’php木马’,3,4,5,6 into outfile ‘D:/www/t.php’<br />
+secure_file_priv=”c:/wamp64/tmp”。</li>
+</ul>
 
 <hr />
 
@@ -166,6 +174,10 @@ secure_file_priv=”c:/wamp64/tmp”。</p>
     <div class="sidenav">
         <h2>Blog</h2>
         <ul class="artical-list">
+        
+            <li><a href="/MsSql_wiki">有关MsSql注入的备忘录</a></li>
+        
+            <li><a href="/summarize-of-XSS-with-case">XSS的常见情况总结</a></li>
         
             <li><a href="/summarize_of_webshell_fileUpload">有关上传webshell文件绕过的总结</a></li>
         
